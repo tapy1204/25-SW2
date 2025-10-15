@@ -10,15 +10,14 @@
 #define SND_VEL 346.0      // m/s @ 24°C
 #define INTERVAL 50        // ms
 #define PULSE_DURATION 10  // us
-#define _DIST_MIN 100      // mm (표시용 가드 레일)
-#define _DIST_MAX 300      // mm (표시용 가드 레일)
+#define _DIST_MIN 100      // mm
+#define _DIST_MAX 300      // mm
 
 #define TIMEOUT ((INTERVAL / 2) * 1000.0) // us
 #define SCALE (0.001 * 0.5 * SND_VEL)     // duration(us) -> mm
 
-#define _EMA_ALPHA 0.6     // 참고용(표시만), 제어는 median 기반
+#define _EMA_ALPHA 0.6     
 
-// ▼ Median 창 크기: 3, 10, 30으로 바꿔가며 테스트하세요.
 #define MEDIAN_N 10
 
 // global variables
@@ -37,7 +36,7 @@ float compute_median() {
   int n = samp_count;
   if (n == 0) return 0.0;
 
-  // 버퍼를 임시 배열로 복사해 정렬 (O(N log N), N<=30이므로 충분히 빠름)
+  // 버퍼를 임시 배열로 복사해 정렬
   float tmp[MEDIAN_N];
   // 순환버퍼 -> 선형 배열 복사
   for (int i = 0; i < n; ++i) {
@@ -46,7 +45,7 @@ float compute_median() {
     tmp[i] = samples[idx];
   }
 
-  // 단순 삽입정렬(소규모 N에 적합)
+  // 단순 삽입정렬
   for (int i = 1; i < n; ++i) {
     float key = tmp[i];
     int j = i - 1;
@@ -84,7 +83,6 @@ void setup() {
 
   Serial.begin(57600);
 
-  // 초기 EMA를 _DIST_MAX로, 샘플 버퍼는 비워둠
   last_sampling_time = millis();
 }
 
@@ -92,35 +90,31 @@ void loop() {
   // 주기 제어
   if (millis() < last_sampling_time + INTERVAL) return;
 
-  // 1) 원시 측정
   float dist_raw = USS_measure(PIN_TRIG, PIN_ECHO);
 
-  // 2) 샘플 버퍼에 추가 (범위 필터/직전 유효값 적용 없이 '있는 그대로' 기록)
+  // 샘플 버퍼에 추가
   samples[samp_head] = dist_raw;
   samp_head = (samp_head + 1) % MEDIAN_N;
   if (samp_count < MEDIAN_N) samp_count++;
 
-  // 3) 중위수 계산
+  // 중위수 계산
   float dist_median = compute_median();
-
-  // 4) EMA(표시 전용) — 과제 요구 핵심은 아님. 그래프 비교 참고용
+  
   dist_ema = _EMA_ALPHA * dist_raw + (1.0f - _EMA_ALPHA) * dist_ema;
 
-  // 5) 시리얼 출력 (슬라이드 포맷 준수)
-  //    그래프 축 폭을 위해 min()으로 상한(+100mm) 클리핑
+  // 시리얼 출력
+  // 그래프 축 폭을 위해 min()으로 상한(+100mm) 클리핑
   Serial.print("Min:");      Serial.print(_DIST_MIN);
   Serial.print(",raw:");     Serial.print(min(dist_raw,   _DIST_MAX + 100));
   Serial.print(",ema:");     Serial.print(min(dist_ema,   _DIST_MAX + 100));
   Serial.print(",median:");  Serial.print(min(dist_median,_DIST_MAX + 100));
   Serial.print(",Max:");     Serial.print(_DIST_MAX);
   Serial.println("");
-
-  // 6) LED 제어는 'median' 기준으로 수행 (중위수 필터만으로 동작 확인 목적)
+  
   if ((dist_median < _DIST_MIN) || (dist_median > _DIST_MAX))
     digitalWrite(PIN_LED, HIGH);  // 범위 밖 -> LED OFF
   else
     digitalWrite(PIN_LED, LOW);   // 범위 내 -> LED ON
-
-  // 7) 주기 갱신
+  
   last_sampling_time += INTERVAL;
 }
