@@ -1,7 +1,3 @@
-// 09_challenge_median.ino
-// 도전과제: 중위수 필터만으로 동작 (직전 유효값 유지 로직 제거)
-
-// Arduino pin assignment
 #define PIN_LED  9
 #define PIN_TRIG 12
 #define PIN_ECHO 13
